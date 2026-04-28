@@ -6,15 +6,15 @@ int16_t prs_osr = 0x03;
 int16_t temp_osr = 0x03;
 double scaledTemp;
 
-// SPI Ayarları: 1MHz hız, MSB First, MODE3 (HP303B için kritik olan bu!)
+// SPI Settings: 1MHz speed, MSB First, MODE3
 SPISettings hp303b_spi_settings(1000000, MSBFIRST, SPI_MODE3);
 
 Boardoza_HP303B::Boardoza_HP303B(void) {
-    _useSPI = false; // Varsayılan
+    _useSPI = false; // Default
 }
 
 void Boardoza_HP303B::begin(TwoWire &wire, uint8_t slaveAddress) {
-    _useSPI = false; // I2C kullanıyoruz
+    _useSPI = false;
     _wire = &wire;
     _i2cAddress = slaveAddress;
     _wire->begin();
@@ -25,34 +25,31 @@ void Boardoza_HP303B::begin(uint8_t slaveAddress) {
 }
 
 void Boardoza_HP303B::begin(SPIClass &spi, int32_t chipSelect) {
-    _useSPI = true; // SPI kullanıyoruz
+    _useSPI = true;
     _spi = &spi;
     _chipSelect = chipSelect;
     pinMode(_chipSelect, OUTPUT);
     digitalWrite(_chipSelect, HIGH);
     _spi->begin();
-    // SPI test transaction (gerekli değil ama bus'ı uyandırmak için kalabilir)
+    // SPI test transaction (not necessary, but can remain to wake up the bus)
     _spi->beginTransaction(hp303b_spi_settings);
     _spi->endTransaction();
 }
 
 void Boardoza_HP303B::end(void) {
     if (!_useSPI) {
-        // Wire end fonksiyonu bazı platformlarda yoktur, varsa kullanın.
+        // Wire end function does not exist on some platforms, use it if available.
     } else {
         _spi->end();
         pinMode(_chipSelect, INPUT);
     }
 }
 
-// ... (Ara fonksiyonlar aynı kalabilir: configIntFIFO, correctTemp vb.) ...
-
 void Boardoza_HP303B::configIntFIFO() {
     if(temp_osr <= 0x03) writeByte(CFG_REG, 0x00);
     else writeByte(CFG_REG, 0x0C);
     
     if(prs_osr > 0x03) writeByte(CFG_REG, 0x0C); 
-    // Not: Mantığında küçük bir hata olabilir (overwrite ediyor), ama orijinal koduna dokunmadım.
 }
 
 int16_t Boardoza_HP303B::correctTemp(void) {
@@ -80,9 +77,6 @@ int16_t Boardoza_HP303B::readReg() {
     return readByte(PRODUCT_ID);
 }
 
-// ... (Ölçüm fonksiyonları: measureRawTemp, measureTemperature vb. aynı kalabilir) ...
-// Not: Bu fonksiyonlar readBlock ve readByte çağırır, biz onları düzelteceğimiz için buralara dokunmaya gerek yok.
-
 int32_t Boardoza_HP303B::measureRawTemp() {
     int32_t tempData;
     if (!readBlock(0x03, 3, rawData)) {
@@ -95,7 +89,6 @@ int32_t Boardoza_HP303B::measureRawTemp() {
 }
 
 int32_t Boardoza_HP303B::measureTemperature() {
-    // Orijinal kodunu korudum
     int32_t tempData1, tempData2; 
     int32_t C0, C1;
     int32_t temp3;
@@ -121,7 +114,7 @@ int32_t Boardoza_HP303B::measureTemperature() {
     temp4 = temp4 / osrTable[temp_osr];
     temp4 = ((double)C0) + (double)C1 * (double)temp4;
 
-    return (int32_t)(temp4); // int32_t return tipine cast edildi
+    return (int32_t)(temp4);
 }
 
 int32_t Boardoza_HP303B::measureRawPres() {
@@ -136,7 +129,6 @@ int32_t Boardoza_HP303B::measureRawPres() {
 }
 
 int32_t Boardoza_HP303B::measurePressure() {
-    // Orijinal hesaplama kodun aynen korundu
     int32_t C00, C10, C20, C30, C01, C11, C21;
     int32_t tempData1, tempData2, tempData3, tempScaledPres, result;
     double scaledPres;
@@ -180,13 +172,9 @@ int32_t Boardoza_HP303B::measurePressure() {
     return result;
 }
 
-// ---------------------------------------------------------
-// KRİTİK BÖLÜMLER: READ/WRITE FONKSİYONLARI (MODERNİZE EDİLDİ)
-// ---------------------------------------------------------
-
 int16_t Boardoza_HP303B::readByte(uint8_t regAddress) {
     if (!_useSPI) { 
-        // I2C Modu
+        // I2C Mode
         _wire->beginTransmission(_i2cAddress);
         _wire->write(regAddress);
         _wire->endTransmission(false);
@@ -197,12 +185,12 @@ int16_t Boardoza_HP303B::readByte(uint8_t regAddress) {
             return -1;
         }
     } else {
-        // SPI Modu (Düzeltildi: MODE3 ve Read Bit)
+        // SPI Mode
         _spi->beginTransaction(hp303b_spi_settings);
         digitalWrite(_chipSelect, LOW);
-        // SPI Read için MSB (En sol bit) 1 olmalı. 0x80 ile OR'luyoruz.
+        // MSB (Leftmost bit) must be 1 for SPI Read. We are OR'ing with 0x80.
         _spi->transfer(regAddress | 0x80); 
-        int16_t result = _spi->transfer(0x00); // Dummy byte gönderip cevabı al
+        int16_t result = _spi->transfer(0x00); // Send dummy byte and get the response
         digitalWrite(_chipSelect, HIGH);
         _spi->endTransaction();
         return result;
@@ -211,7 +199,6 @@ int16_t Boardoza_HP303B::readByte(uint8_t regAddress) {
 
 int16_t Boardoza_HP303B::readBlock(uint8_t regAddress, uint8_t length, uint8_t *buffer) {
     if (!_useSPI) {
-        // I2C
         _wire->beginTransmission(_i2cAddress);
         _wire->write(regAddress);
         _wire->endTransmission(false);
@@ -222,10 +209,9 @@ int16_t Boardoza_HP303B::readBlock(uint8_t regAddress, uint8_t length, uint8_t *
         }
         return 0;
     } else {
-        // SPI (Düzeltildi)
         _spi->beginTransaction(hp303b_spi_settings);
         digitalWrite(_chipSelect, LOW);
-        _spi->transfer(regAddress | 0x80); // Read komutu
+        _spi->transfer(regAddress | 0x80);
         for(uint8_t i = 0; i < length; i++) {
             buffer[i] = _spi->transfer(0x00);
         }
@@ -237,16 +223,14 @@ int16_t Boardoza_HP303B::readBlock(uint8_t regAddress, uint8_t length, uint8_t *
 
 int16_t Boardoza_HP303B::writeByte(uint8_t regAddress, uint8_t data) {
     if (!_useSPI) {
-        // I2C
         _wire->beginTransmission(_i2cAddress);
         _wire->write(regAddress);
         _wire->write(data);
         return _wire->endTransmission();
     } else {
-        // SPI (Düzeltildi)
         _spi->beginTransaction(hp303b_spi_settings);
         digitalWrite(_chipSelect, LOW);
-        // Write için MSB 0 olmalı. 0x7F ile AND'liyoruz.
+        // MSB must be 0 for Write. We are AND'ing with 0x7F.
         _spi->transfer(regAddress & 0x7F); 
         _spi->transfer(data);
         digitalWrite(_chipSelect, HIGH);
