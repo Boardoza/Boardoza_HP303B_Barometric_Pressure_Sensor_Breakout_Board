@@ -10,7 +10,7 @@
 #include <Wire.h>
 #include <SPI.h>
 
-// Register Adresleri
+// Register Addresses
 #define PSR_B2 0x00
 #define PSR_B1 0x01
 #define PSR_B0 0x02
@@ -59,7 +59,7 @@ class Boardoza_HP303B {
 public:
     Boardoza_HP303B(void);
     
-    // Begin fonksiyonları
+    // Begin functions
     void begin(TwoWire &wire, uint8_t slaveAddress);
     void begin(uint8_t slaveAddress = HP303B_I2C_ADDRESS);
     void begin(SPIClass &spi, int32_t chipSelect);
@@ -75,14 +75,14 @@ public:
     int16_t setInterruptPolarity(uint8_t polarity);
     int16_t setInterruptSources(uint8_t fifoFull, uint8_t tempReady, uint8_t presReady);
     
-    // Konfigürasyon ve Yardımcılar
+    // Configuration functions
     int16_t correctTemp(void);
     void setOpMode(Mode opMode);
     void configTemp(bool temp_ext, uint8_t temp_mr, uint8_t temp_osr);
     void configPressure(uint8_t prs_mr, uint8_t prs_osr);
     void configIntFIFO();
     
-    // Düşük seviye okuma/yazma (Public yaptıkların)
+    // Low-level read write functions
     int16_t readByte(uint8_t regAddress);
     int16_t readBlock(uint8_t regAddress, uint8_t length, uint8_t *buffer);
     int16_t writeByte(uint8_t regAddress, uint8_t data);
@@ -94,7 +94,6 @@ private:
     SPIClass *_spi;
     uint8_t _i2cAddress;
     
-    // Hangi protokolün kullanıldığını takip etmek için:
     bool _useSPI; 
 };
 
